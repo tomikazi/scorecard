@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <link rel="apple-touch-icon" href="app.png">
+  <title>Score Card</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --bg: #1a1a1e;
+      --surface: #25252c;
+      --text: #e8e8ed;
+      --muted: #888;
+      --accent: #4a9eff;
+      --danger: #e54d4d;
+      --border: #3a3a42;
+      --radius: 8px;
+      --safe-top: env(safe-area-inset-top, 0);
+      --safe-bottom: env(safe-area-inset-bottom, 0);
+    }
+    [data-theme="light"] {
+      --bg: #f0f0f4;
+      --surface: #fff;
+      --text: #1a1a1e;
+      --muted: #666;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      --border: #e0e0e6;
+    }
+    [data-theme="light"] .score-table tr.subtotal td {
+      background: rgba(37, 99, 235, 0.06);
+    }
+    [data-theme="light"] .main-buttons button:active,
+    [data-theme="light"] .btn:active { background: #e8e8ec; }
+    [data-theme="light"] .main-buttons button.primary:active { background: #1d4ed8; }
+    [data-theme="light"] .main-buttons button.danger:active { background: #b91c1c; }
+    [data-theme="light"] .flyover input[type="number"],
+    [data-theme="light"] .flyover input[type="text"] {
+      background: #f8f8fc;
+    }
+    html { -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      padding: 12px 16px calc(12px + var(--safe-bottom));
+      padding-top: calc(12px + var(--safe-top));
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 16px;
+    }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* Main view */
+    #main-view {
+      max-width: 320px;
+      margin: 0 auto;
+      padding-top: min(4vh, 24px);
+    }
+    #main-view .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    #main-view .header-row h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0;
+      color: var(--text);
+    }
+    .theme-btn {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 1.35rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .theme-btn:hover { background: var(--border); }
+    .theme-btn:active { opacity: 0.9; }
+    .theme-btn .lucide-icon {
+      width: 24px;
+      height: 24px;
+      color: inherit;
+    }
+    .main-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .main-buttons .separator {
+      height: 1px;
+      background: var(--border);
+      margin: 8px 0;
+      list-style: none;
+    }
+    .main-buttons button,
+    .btn {
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 1rem;
+      font-weight: 500;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .main-buttons button:active,
+    .btn:active { background: #32323a; }
+    .main-buttons button.primary,
+    .btn.primary { background: var(--accent); color: #fff; text-align: center; }
+    .main-buttons button.primary:active { background: #3a8eef; }
+    .main-buttons button.danger,
+    .btn.danger { background: var(--danger); color: #fff; text-align: center; margin-top: 16px; }
+    .main-buttons button.danger:active { background: #d43d3d; }
+
+    /* Score card view */
+    #scorecard-view {
+      max-width: 100%;
+      max-height: calc(100vh - var(--safe-top) - var(--safe-bottom) - 24px);
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #scorecard-view .header-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 4px;
+      background: var(--surface);
+      padding: 8px;
+      border-radius: var(--radius);
+    }
+    #scorecard-view .header-row .theme-btn {
+      margin-left: auto;
+    }
+    #scorecard-view .title {
+      flex: 1;
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    .score-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .score-table {
+      width: 100%;
+      min-width: 280px;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .score-table th:not(:first-child),
+    .score-table td:not(:first-child) {
+      min-width: 52px;
+    }
+    .score-table th,
+    .score-table td {
+      padding: 10px 8px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .score-table th {
+      font-weight: 600;
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+    }
+    .score-table th:first-child,
+    .score-table td:first-child {
+      text-align: left;
+      width: 1%;
+      min-width: 0;
+      padding-left: 6px;
+      padding-right: 6px;
+      font-weight: 500;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .score-table th:not(:last-child),
+    .score-table td:not(:last-child) {
+      border-right: 1px solid var(--border);
+    }
+    .score-table td.subtotal-icon {
+      font-size: 1.1rem;
+      color: var(--muted);
+    }
+    .score-table tr.subtotal td {
+      background: rgba(74, 158, 255, 0.08);
+      font-weight: 600;
+      border-bottom-width: 2px;
+    }
+    .score-table tr.subtotal td:first-child {
+      color: var(--text);
+    }
+    .score-table tbody tr.score-row-editable {
+      cursor: pointer;
+    }
+    .score-table tbody tr.score-row-editable:hover td {
+      background: rgba(74, 158, 255, 0.06);
+    }
+    .score-table input.score-input {
+      width: 100%;
+      max-width: 64px;
+      padding: 8px;
+      font-size: 1rem;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    #scorecard-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+
+    /* Overlay and fly-over */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      padding-bottom: calc(16px + var(--safe-bottom));
+    }
+    .overlay.active {
+      display: flex;
+    }
+    .flyover {
+      width: 100%;
+      max-width: 360px;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 20px;
+    }
+    .flyover h2 {
+      margin: 0 0 16px;
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+    .flyover .field {
+      margin-bottom: 16px;
+    }
+    .flyover label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .flyover input[type="number"],
+    .flyover input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+    }
+    .flyover .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .flyover .actions button {
+      flex: 1;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: 500;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+    .flyover .actions .cancel {
+      background: var(--border);
+      color: var(--text);
+    }
+    .flyover .actions .save {
+      background: var(--accent);
+      color: #fff;
+    }
+    .confirm-dialog .confirm-message {
+      margin: 0 0 20px;
+      font-size: 1rem;
+      line-height: 1.4;
+      color: var(--text);
+    }
+    .confirm-dialog .actions .confirm-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    .confirm-dialog .actions .confirm-danger:active {
+      background: #d43d3d;
+    }
+    #new-card-players .player-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    #new-card-players .player-row label {
+      flex: 0 0 80px;
+      margin: 0;
+    }
+    #new-card-players .player-row input {
+      flex: 1;
+      min-width: 0;
+    }
+    #new-card-players .player-row .player-remove {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #new-card-players .player-row .player-remove:hover {
+      color: var(--text);
+      background: var(--border);
+    }
+    #round-scores .player-score-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    #round-scores .player-score-row label {
+      flex: 1;
+      margin: 0;
+      color: var(--text);
+    }
+    #round-scores .player-score-row input {
+      width: 80px;
+      flex-shrink: 0;
+      padding: 10px;
+      font-size: 1rem;
+      text-align: center;
+    }
+    #final-score-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    #final-score-list .final-score-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 1rem;
+    }
+    #final-score-list .final-score-row:last-child {
+      border-bottom: none;
+    }
+    #final-score-list .final-score-rank {
+      flex: 0 0 36px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    #final-score-list .final-score-row:first-child .final-score-rank {
+      color: var(--accent);
+    }
+    #final-score-list .final-score-name {
+      flex: 1;
+      font-weight: 500;
+    }
+    #final-score-list .final-score-value {
+      flex: 0 0 48px;
+      text-align: right;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main id="main-view" class="view active">
+    <div class="header-row">
+      <h1>Score Cards</h1>
+      <button type="button" class="theme-btn" id="theme-btn-main" aria-label="Switch theme" title="Switch theme"></button>
+    </div>
+    <ul class="main-buttons" id="main-buttons"></ul>
+  </main>
+
+  <section id="scorecard-view" class="view">
+    <div class="header-row">
+      <h2 class="title" id="scorecard-title">Score Card</h2>
+      <button type="button" class="theme-btn" id="theme-btn-scorecard" aria-label="Switch theme" title="Switch theme"></button>
+    </div>
+    <div class="score-table-wrap">
+      <table class="score-table" id="score-table">
+        <thead id="score-thead"></thead>
+        <tbody id="score-tbody"></tbody>
+      </table>
+    </div>
+    <div id="scorecard-actions">
+      <button type="button" class="btn primary" id="score-this-round">Score This Round</button>
+      <button type="button" class="btn danger" id="delete-card">Delete This Card</button>
+    </div>
+  </section>
+
+  <div id="new-card-overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="new-card-title">
+    <div class="flyover">
+      <h2 id="new-card-title">New Score Card</h2>
+      <div class="field" id="new-card-rounds-field">
+        <label for="new-card-rounds">Number of rounds (3–20)</label>
+        <input type="number" id="new-card-rounds" min="3" max="20" value="10">
+      </div>
+      <div id="new-card-players"></div>
+      <div class="actions">
+        <button type="button" class="cancel" id="new-card-cancel">Cancel</button>
+        <button type="button" class="save" id="new-card-start">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="round-score-overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="round-score-title">
+    <div class="flyover">
+      <h2 id="round-score-title">Round <span id="round-number">1</span> – Enter scores</h2>
+      <div id="round-scores"></div>
+      <div class="actions">
+        <button type="button" class="cancel" id="round-score-cancel">Cancel</button>
+        <button type="button" class="save" id="round-score-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="confirm-overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="flyover confirm-dialog">
+      <h2 id="confirm-title">Confirm</h2>
+      <p class="confirm-message" id="confirm-message"></p>
+      <div class="actions">
+        <button type="button" class="cancel" id="confirm-cancel">Cancel</button>
+        <button type="button" class="confirm-danger" id="confirm-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="final-score-overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="final-score-title">
+    <div class="flyover">
+      <h2 id="final-score-title">Final Score</h2>
+      <div id="final-score-list"></div>
+      <div class="actions" style="margin-top: 20px;">
+        <button type="button" class="save" id="final-score-close" style="flex: none; padding-left: 24px; padding-right: 24px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  const STORAGE_KEY = 'scorecard_current_game';
+  const THEME_STORAGE_KEY = 'scorecard_theme';
+  const PLAYERS_STORAGE_KEY = 'scorecard_players';
+
+  const FIVE_CROWNS_LABELS = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+  const state = {
+    players: [],
+    totalRounds: 10,
+    roundLabels: [],   // [ roundIndex ] => label string; if empty, use default (round number)
+    roundScores: [],   // [ roundIndex ][ playerIndex ] = score
+    currentRound: 0,   // 0-based; next round to score
+    editingRoundIndex: null  // null = add new round; number = editing that round
+  };
+
+  let pendingRoundLabels = null;  // set when opening new card with custom labels (e.g. Five Crowns)
+
+  function defaultRoundLabels(n) {
+    return Array.from({ length: n }, function (_, i) { return String(i + 1); });
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.players && Array.isArray(data.players) && data.players.length >= 2 && data.players.length <= 8 &&
+          typeof data.totalRounds === 'number' && data.totalRounds >= 3 && data.totalRounds <= 20 &&
+          Array.isArray(data.roundScores) && typeof data.currentRound === 'number') {
+        state.players = data.players;
+        state.totalRounds = data.totalRounds;
+        state.roundLabels = Array.isArray(data.roundLabels) && data.roundLabels.length === data.totalRounds
+          ? data.roundLabels
+          : defaultRoundLabels(data.totalRounds);
+        state.roundScores = data.roundScores;
+        state.currentRound = Math.min(data.currentRound, data.totalRounds);
+      }
+    } catch (_) {}
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        players: state.players,
+        totalRounds: state.totalRounds,
+        roundLabels: state.roundLabels,
+        roundScores: state.roundScores,
+        currentRound: state.currentRound
+      }));
+    } catch (_) {}
+  }
+
+  function clearState() {
+    state.players = [];
+    state.totalRounds = 10;
+    state.roundLabels = [];
+    state.roundScores = [];
+    state.currentRound = 0;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  }
+
+  function hasGameInProgress() {
+    return state.players.length >= 2 && state.totalRounds >= 3;
+  }
+
+  // --- Views ---
+  function showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
+  }
+
+  function showOverlay(id, show) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', !!show);
+  }
+
+  function getTheme() {
+    try {
+      const t = localStorage.getItem(THEME_STORAGE_KEY);
+      return t === 'light' ? 'light' : 'dark';
+    } catch (_) { return 'dark'; }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (_) {}
+    updateThemeButtons();
+  }
+  var PALETTE_SVG = '<svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.648 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>';
+  function updateThemeButtons() {
+    const title = 'Switch theme';
+    ['theme-btn-main', 'theme-btn-scorecard'].forEach(function (id) {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.setAttribute('title', title);
+      btn.setAttribute('aria-label', title);
+      btn.innerHTML = PALETTE_SVG;
+    });
+  }
+  function toggleTheme() {
+    applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+  }
+
+  function showConfirm(message, title) {
+    return new Promise(function (resolve) {
+      document.getElementById('confirm-title').textContent = title || 'Confirm';
+      document.getElementById('confirm-message').textContent = message;
+      showOverlay('confirm-overlay', true);
+      function done(result) {
+        showOverlay('confirm-overlay', false);
+        document.getElementById('confirm-cancel').removeEventListener('click', onCancel);
+        document.getElementById('confirm-ok').removeEventListener('click', onOk);
+        resolve(result);
+      }
+      function onCancel() { done(false); }
+      function onOk() { done(true); }
+      document.getElementById('confirm-cancel').addEventListener('click', onCancel);
+      document.getElementById('confirm-ok').addEventListener('click', onOk);
+    });
+  }
+
+  // --- Main view ---
+  function renderMainView() {
+    const list = document.getElementById('main-buttons');
+    list.innerHTML = '';
+
+    if (hasGameInProgress()) {
+      const currentBtn = document.createElement('button');
+      currentBtn.textContent = 'Current Score Card';
+      currentBtn.className = 'primary';
+      currentBtn.type = 'button';
+      currentBtn.addEventListener('click', () => { saveState(); openScoreCard(); });
+      list.appendChild(currentBtn);
+
+      const sep = document.createElement('li');
+      sep.className = 'separator';
+      list.appendChild(sep);
+    }
+
+    const presets = [
+      { label: 'New Five Crowns Score Card', rounds: FIVE_CROWNS_LABELS.length, roundLabels: FIVE_CROWNS_LABELS },
+      { label: 'New Play Nine Score Card', rounds: 9, roundLabels: null },
+      { label: 'New Custom Score Card', rounds: null, roundLabels: null }
+    ];
+    presets.forEach(({ label, rounds, roundLabels }) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.type = 'button';
+      btn.addEventListener('click', () => openNewCard(rounds, roundLabels));
+      list.appendChild(btn);
+    });
+  }
+
+  function getRememberedPlayers() {
+    try {
+      const raw = localStorage.getItem(PLAYERS_STORAGE_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter(function (p) { return typeof p === 'string' && p.trim(); }) : [];
+    } catch (_) { return []; }
+  }
+  function setRememberedPlayers(players) {
+    try {
+      localStorage.setItem(PLAYERS_STORAGE_KEY, JSON.stringify(players));
+    } catch (_) {}
+  }
+
+  function openNewCard(rounds, roundLabels) {
+    const roundsInput = document.getElementById('new-card-rounds');
+    const roundsField = document.getElementById('new-card-rounds-field');
+    const container = document.getElementById('new-card-players');
+    pendingRoundLabels = roundLabels && roundLabels.length ? roundLabels : null;
+    const numRounds = rounds != null ? rounds : (roundLabels && roundLabels.length ? roundLabels.length : 10);
+    roundsInput.value = numRounds;
+    roundsField.style.display = rounds != null ? 'none' : '';
+    container.innerHTML = '';
+
+    function updateRemoveButtons() {
+      const rows = container.querySelectorAll('.player-row');
+      rows.forEach(function (row) {
+        const removeBtn = row.querySelector('.player-remove');
+        if (removeBtn) removeBtn.style.visibility = rows.length > 2 ? 'visible' : 'hidden';
+      });
+    }
+
+    const addPlayerInput = (index, defaultValue) => {
+      const row = document.createElement('div');
+      row.className = 'player-row';
+      const label = document.createElement('label');
+      label.textContent = `Player ${index + 1}`;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Name or initials';
+      input.dataset.index = String(index);
+      if (defaultValue != null) input.value = defaultValue;
+      input.addEventListener('input', () => {
+        const nextIndex = index + 1;
+        if (nextIndex < 8 && !container.querySelector(`[data-index="${nextIndex}"]`)) {
+          addPlayerInput(nextIndex);
+          updateRemoveButtons();
+        }
+      });
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'player-remove';
+      removeBtn.innerHTML = '&times;';
+      removeBtn.setAttribute('aria-label', 'Remove player');
+      removeBtn.addEventListener('click', () => {
+        if (container.querySelectorAll('.player-row').length <= 2) return;
+        row.remove();
+        updateRemoveButtons();
+      });
+      row.appendChild(label);
+      row.appendChild(input);
+      row.appendChild(removeBtn);
+      container.appendChild(row);
+    };
+
+    const remembered = getRememberedPlayers();
+    if (remembered.length > 0) {
+      remembered.forEach(function (name, i) {
+        if (i < 8) addPlayerInput(i, name);
+      });
+    } else {
+      addPlayerInput(0);
+    }
+    if (container.querySelectorAll('.player-row').length < 8) {
+      addPlayerInput(container.querySelectorAll('.player-row').length);
+    }
+    updateRemoveButtons();
+
+    showOverlay('new-card-overlay', true);
+  }
+
+  function closeNewCard() {
+    showOverlay('new-card-overlay', false);
+  }
+
+  function startNewCard() {
+    const roundsInput = document.getElementById('new-card-rounds');
+    const container = document.getElementById('new-card-players');
+    const rounds = Math.max(3, Math.min(20, parseInt(roundsInput.value, 10) || 10));
+    const inputs = container.querySelectorAll('input[type="text"]');
+    const players = [];
+    inputs.forEach(inp => {
+      const name = (inp.value || '').trim();
+      if (name) players.push(name);
+    });
+    if (players.length < 2) {
+      alert('Please enter at least 2 players.');
+      return;
+    }
+    if (players.length > 8) {
+      alert('Maximum 8 players.');
+      return;
+    }
+    state.players = players;
+    state.totalRounds = rounds;
+    state.roundLabels = pendingRoundLabels && pendingRoundLabels.length === rounds
+      ? pendingRoundLabels.slice()
+      : defaultRoundLabels(rounds);
+    pendingRoundLabels = null;
+    state.roundScores = [];
+    state.currentRound = 0;
+    setRememberedPlayers(players);
+    saveState();
+    closeNewCard();
+    openScoreCard();
+  }
+
+  function openScoreCard() {
+    renderScoreCard();
+    showView('scorecard-view');
+  }
+
+  function renderScoreCard() {
+    const thead = document.getElementById('score-thead');
+    const tbody = document.getElementById('score-tbody');
+    const tr = document.createElement('tr');
+    tr.appendChild(document.createElement('th')); // round label column
+    state.players.forEach(name => {
+      const th = document.createElement('th');
+      th.textContent = name;
+      tr.appendChild(th);
+    });
+    thead.innerHTML = '';
+    thead.appendChild(tr);
+
+    tbody.innerHTML = '';
+    const playedRounds = state.roundScores.length;
+    for (let r = 0; r < playedRounds; r++) {
+      const scoreRow = document.createElement('tr');
+      scoreRow.dataset.roundIndex = String(r);
+      if (r < state.currentRound) {
+        scoreRow.className = 'score-row-editable';
+        scoreRow.setAttribute('title', 'Tap to edit round scores');
+        scoreRow.addEventListener('click', function () {
+          const roundIndex = parseInt(scoreRow.dataset.roundIndex, 10);
+          const label = (state.roundLabels[roundIndex] !== undefined && state.roundLabels[roundIndex] !== '')
+            ? state.roundLabels[roundIndex]
+            : String(roundIndex + 1);
+          showConfirm('You are about to change the scores for Round ' + label + '. Continue?', 'Edit past round').then(function (confirmed) {
+            if (confirmed) openRoundScoring(roundIndex);
+          });
+        });
+      }
+      const roundLabel = document.createElement('td');
+      roundLabel.textContent = (state.roundLabels[r] !== undefined && state.roundLabels[r] !== '')
+        ? state.roundLabels[r]
+        : String(r + 1);
+      scoreRow.appendChild(roundLabel);
+      state.roundScores[r].forEach(s => {
+        const td = document.createElement('td');
+        td.textContent = s;
+        scoreRow.appendChild(td);
+      });
+      tbody.appendChild(scoreRow);
+
+      if (r > 0) {
+        const subtotalRow = document.createElement('tr');
+        subtotalRow.className = 'subtotal';
+        const subLabel = document.createElement('td');
+        subLabel.className = 'subtotal-icon';
+        subLabel.textContent = '\u2211';
+        subLabel.setAttribute('title', 'Subtotal');
+        subLabel.setAttribute('aria-label', 'Subtotal');
+        subtotalRow.appendChild(subLabel);
+        const subtotals = getSubtotalsAfterRound(r);
+        subtotals.forEach(s => {
+          const td = document.createElement('td');
+          td.textContent = s;
+          subtotalRow.appendChild(td);
+        });
+        tbody.appendChild(subtotalRow);
+      }
+    }
+
+    const scoreBtn = document.getElementById('score-this-round');
+    if (state.currentRound >= state.totalRounds) {
+      scoreBtn.style.display = 'none';
+    } else {
+      scoreBtn.style.display = '';
+    }
+  }
+
+  function getSubtotalsAfterRound(roundIndex) {
+    const sums = state.players.map(() => 0);
+    for (let r = 0; r <= roundIndex; r++) {
+      state.roundScores[r].forEach((s, i) => { sums[i] += s; });
+    }
+    return sums;
+  }
+
+  function openRoundScoring(roundIndexForEdit) {
+    const isEdit = roundIndexForEdit !== undefined && roundIndexForEdit !== null;
+    state.editingRoundIndex = isEdit ? roundIndexForEdit : null;
+    const roundIndex = isEdit ? roundIndexForEdit : state.currentRound;
+    const label = (state.roundLabels[roundIndex] !== undefined && state.roundLabels[roundIndex] !== '')
+      ? state.roundLabels[roundIndex]
+      : String(roundIndex + 1);
+    const titleParent = document.getElementById('round-score-title');
+    if (titleParent) {
+      titleParent.innerHTML = '';
+      titleParent.appendChild(document.createTextNode(isEdit ? 'Edit Round ' : 'Round '));
+      const span = document.createElement('span');
+      span.id = 'round-number';
+      span.textContent = label;
+      titleParent.appendChild(span);
+      titleParent.appendChild(document.createTextNode(isEdit ? '' : ' – Enter scores'));
+    }
+    const container = document.getElementById('round-scores');
+    container.innerHTML = '';
+    const existingScores = isEdit ? state.roundScores[roundIndexForEdit] : [];
+    state.players.forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'player-score-row';
+      const label = document.createElement('label');
+      label.textContent = name;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.classList.add('score-input');
+      input.placeholder = '0';
+      input.dataset.playerIndex = String(i);
+      input.value = existingScores[i] !== undefined ? String(existingScores[i]) : '';
+      row.appendChild(label);
+      row.appendChild(input);
+      container.appendChild(row);
+    });
+    showOverlay('round-score-overlay', true);
+  }
+
+  function closeRoundScoring() {
+    state.editingRoundIndex = null;
+    showOverlay('round-score-overlay', false);
+  }
+
+  function getFinalStandings() {
+    const lastRound = state.roundScores.length - 1;
+    if (lastRound < 0) return [];
+    const totals = getSubtotalsAfterRound(lastRound);
+    const withNames = state.players.map(function (name, i) {
+      return { name: name, score: totals[i] };
+    });
+    withNames.sort(function (a, b) { return a.score - b.score; });
+    return withNames;
+  }
+
+  function openFinalScore() {
+    const listEl = document.getElementById('final-score-list');
+    listEl.innerHTML = '';
+    const standings = getFinalStandings();
+    standings.forEach(function (entry, i) {
+      const row = document.createElement('div');
+      row.className = 'final-score-row';
+      const rank = document.createElement('span');
+      rank.className = 'final-score-rank';
+      rank.textContent = String(i + 1);
+      const name = document.createElement('span');
+      name.className = 'final-score-name';
+      name.textContent = entry.name;
+      const score = document.createElement('span');
+      score.className = 'final-score-value';
+      score.textContent = String(entry.score);
+      row.appendChild(rank);
+      row.appendChild(name);
+      row.appendChild(score);
+      listEl.appendChild(row);
+    });
+    showOverlay('final-score-overlay', true);
+  }
+
+  function closeFinalScore() {
+    showOverlay('final-score-overlay', false);
+  }
+
+  function saveRoundScores() {
+    const container = document.getElementById('round-scores');
+    const inputs = container.querySelectorAll('input');
+    const scores = [];
+    let valid = true;
+    inputs.forEach(inp => {
+      const v = inp.value.trim();
+      const n = v === '' || v === '-' ? 0 : parseInt(inp.value, 10);
+      if (isNaN(n)) valid = false;
+      scores.push(isNaN(n) ? 0 : n);
+    });
+    if (!valid) {
+      alert('Please enter valid integers for all scores.');
+      return;
+    }
+    const isEdit = state.editingRoundIndex !== null;
+    if (isEdit) {
+      state.roundScores[state.editingRoundIndex] = scores;
+    } else {
+      state.roundScores.push(scores);
+      state.currentRound++;
+    }
+    saveState();
+    closeRoundScoring();
+    renderScoreCard();
+    (function scrollToBottom() {
+      var view = document.getElementById('scorecard-view');
+      if (view) {
+        requestAnimationFrame(function () {
+          view.scrollTop = view.scrollHeight - view.clientHeight;
+        });
+      }
+    })();
+    if (!isEdit && state.currentRound >= state.totalRounds) {
+      openFinalScore();
+    }
+  }
+
+  function deleteCard() {
+    showConfirm('Delete this score card? This cannot be undone.', 'Delete card').then(function (confirmed) {
+      if (!confirmed) return;
+      clearState();
+      showView('main-view');
+      renderMainView();
+    });
+  }
+
+  // --- Event bindings ---
+  document.getElementById('score-this-round').addEventListener('click', () => {
+    if (state.currentRound < state.totalRounds) openRoundScoring();
+  });
+
+  document.getElementById('delete-card').addEventListener('click', deleteCard);
+
+  document.getElementById('new-card-cancel').addEventListener('click', closeNewCard);
+  document.getElementById('new-card-start').addEventListener('click', startNewCard);
+
+  document.getElementById('round-score-cancel').addEventListener('click', closeRoundScoring);
+  document.getElementById('round-score-save').addEventListener('click', saveRoundScores);
+
+  document.getElementById('final-score-close').addEventListener('click', closeFinalScore);
+
+  document.getElementById('theme-btn-main').addEventListener('click', toggleTheme);
+  document.getElementById('theme-btn-scorecard').addEventListener('click', toggleTheme);
+
+  // Init
+  applyTheme(getTheme());
+  loadState();
+  renderMainView();
+})();
+  </script>
+</body>
+</html>
