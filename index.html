@@ -149,7 +149,17 @@
       border-radius: var(--radius);
     }
     #scorecard-view .header-row .theme-btn {
+      flex-shrink: 0;
+    }
+    #scorecard-view .header-row .theme-btn:last-of-type {
       margin-left: auto;
+    }
+    #scorecard-view .header-row button[aria-pressed="true"] {
+      background: var(--border);
+    }
+    #scorecard-view .header-row .theme-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     #scorecard-view .title {
       flex: 1;
@@ -421,6 +431,8 @@
   <section id="scorecard-view" class="view">
     <div class="header-row">
       <h2 class="title" id="scorecard-title">Score Card</h2>
+      <button type="button" class="theme-btn" id="trophy-btn" aria-label="View standings" title="View standings"></button>
+      <button type="button" class="theme-btn" id="subtotals-toggle-btn" aria-label="Show only total" title="Show only total" aria-pressed="false"></button>
       <button type="button" class="theme-btn" id="theme-btn-scorecard" aria-label="Switch theme" title="Switch theme"></button>
     </div>
     <div class="score-table-wrap">
@@ -487,6 +499,7 @@
   const STORAGE_KEY = 'scorecard_current_game';
   const THEME_STORAGE_KEY = 'scorecard_theme';
   const PLAYERS_STORAGE_KEY = 'scorecard_players';
+  const SUBTOTALS_DISPLAY_KEY = 'scorecard_subtotals_display';
 
   const FIVE_CROWNS_LABELS = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
@@ -573,6 +586,8 @@
     updateThemeButtons();
   }
   var PALETTE_SVG = '<svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.648 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>';
+  var ARROW_UP_DOWN_SVG = '<svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
+  var TROPHY_SVG = '<svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>';
   function updateThemeButtons() {
     const title = 'Switch theme';
     ['theme-btn-main', 'theme-btn-scorecard'].forEach(function (id) {
@@ -585,6 +600,37 @@
   }
   function toggleTheme() {
     applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+  }
+
+  function getSubtotalsDisplay() {
+    try {
+      return localStorage.getItem(SUBTOTALS_DISPLAY_KEY) === 'only_last' ? 'only_last' : 'all';
+    } catch (_) { return 'all'; }
+  }
+  function setSubtotalsDisplay(value) {
+    try { localStorage.setItem(SUBTOTALS_DISPLAY_KEY, value); } catch (_) {}
+  }
+  function updateSubtotalsToggleButton() {
+    const btn = document.getElementById('subtotals-toggle-btn');
+    if (!btn) return;
+    const onlyLast = getSubtotalsDisplay() === 'only_last';
+    btn.innerHTML = ARROW_UP_DOWN_SVG;
+    btn.setAttribute('aria-pressed', onlyLast ? 'true' : 'false');
+    btn.setAttribute('title', onlyLast ? 'Show all subtotals' : 'Show only total');
+    btn.setAttribute('aria-label', onlyLast ? 'Show all subtotals' : 'Show only total');
+  }
+  function applySubtotalVisibility() {
+    const rows = document.querySelectorAll('#score-table tbody tr.subtotal');
+    const onlyLast = getSubtotalsDisplay() === 'only_last';
+    rows.forEach(function (row, i) {
+      var isLast = i === rows.length - 1;
+      row.style.display = onlyLast && !isLast ? 'none' : '';
+    });
+  }
+  function toggleSubtotalsDisplay() {
+    setSubtotalsDisplay(getSubtotalsDisplay() === 'only_last' ? 'all' : 'only_last');
+    updateSubtotalsToggleButton();
+    applySubtotalVisibility();
   }
 
   function showConfirm(message, title) {
@@ -759,7 +805,22 @@
     showView('scorecard-view');
   }
 
+  function getScoreCardTitle() {
+    const n = state.totalRounds;
+    const labels = state.roundLabels;
+    if (n === FIVE_CROWNS_LABELS.length && labels.length === n &&
+        FIVE_CROWNS_LABELS.every(function (l, i) { return labels[i] === l; })) {
+      return 'Five Crowns';
+    }
+    var defaultNine = defaultRoundLabels(9);
+    if (n === 9 && labels.length === 9 && defaultNine.every(function (l, i) { return labels[i] === l; })) {
+      return 'Play Nine';
+    }
+    return n + ' Rounds';
+  }
+
   function renderScoreCard() {
+    document.getElementById('scorecard-title').textContent = getScoreCardTitle();
     const thead = document.getElementById('score-thead');
     const tbody = document.getElementById('score-tbody');
     const tr = document.createElement('tr');
@@ -827,6 +888,15 @@
     } else {
       scoreBtn.style.display = '';
     }
+    updateSubtotalsToggleButton();
+    applySubtotalVisibility();
+    var trophyBtn = document.getElementById('trophy-btn');
+    if (trophyBtn) {
+      trophyBtn.innerHTML = TROPHY_SVG;
+      trophyBtn.disabled = state.roundScores.length === 0;
+      trophyBtn.setAttribute('aria-label', 'View standings');
+      trophyBtn.setAttribute('title', 'View standings');
+    }
   }
 
   function getSubtotalsAfterRound(roundIndex) {
@@ -891,7 +961,8 @@
     return withNames;
   }
 
-  function openFinalScore() {
+  function showStandingsOverlay(title) {
+    document.getElementById('final-score-title').textContent = title;
     const listEl = document.getElementById('final-score-list');
     listEl.innerHTML = '';
     const standings = getFinalStandings();
@@ -913,6 +984,10 @@
       listEl.appendChild(row);
     });
     showOverlay('final-score-overlay', true);
+  }
+
+  function openFinalScore() {
+    showStandingsOverlay('Final Score');
   }
 
   function closeFinalScore() {
@@ -983,6 +1058,10 @@
 
   document.getElementById('theme-btn-main').addEventListener('click', toggleTheme);
   document.getElementById('theme-btn-scorecard').addEventListener('click', toggleTheme);
+  document.getElementById('subtotals-toggle-btn').addEventListener('click', toggleSubtotalsDisplay);
+  document.getElementById('trophy-btn').addEventListener('click', function () {
+    if (state.roundScores.length > 0) showStandingsOverlay('Standings');
+  });
 
   // Init
   applyTheme(getTheme());
